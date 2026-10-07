@@ -1,0 +1,30 @@
+# Phân tích Trade-off: Biến đổi Mảng Trực tiếp (Mutating) vs Bản sao Bất biến
+
+## 1. Bảng so sánh Độ phức tạp thời gian (Time Complexity)
+
+| Phương thức | Vị trí thao tác | Độ phức tạp | Lý do kỹ thuật |
+| :--- | :--- | :--- | :--- |
+| `push()` / `pop()` | Cuối mảng (End) | **O(1)** | Rất nhanh. Không cần dịch chuyển các phần tử còn lại, thao tác trực tiếp ở vùng nhớ cuối cùng. |
+| `unshift()` / `shift()` | Đầu mảng (Beginning) | **O(N)** | Chậm khi N lớn. Bắt buộc phải đánh lại chỉ số (re-indexing) cho toàn bộ `N-1` phần tử phía sau. |
+| `splice(index, ...)` | Giữa mảng | **O(N)** | Phải dịch chuyển các phần tử phía sau vị trí chèn/xóa để lấp chỗ trống. |
+
+---
+
+## 2. Giải thích cơ chế Re-indexing trong bộ nhớ V8 Engine
+
+- Khi sử dụng mảng liên tục, các phần tử được sắp xếp liền kề nhau trong bộ nhớ.
+- Thao tác `queue.shift()` thực chất là xóa phần tử ở `index 0`. Tuy nhiên, để lấp đầy khoảng trống này, V8 Engine phải chạy một vòng lặp ngầm dưới background: copy phần tử từ `index 1` sang `index 0`, từ `index 2` sang `index 1`,... liên tục cho đến hết mảng.
+- **Hệ quả thực tế:** Nếu trạm sạc có 10.000 xe xếp hàng, **chỉ 1 lần gọi `shift()` sẽ kích hoạt 9.999 thao tác dịch chuyển bộ nhớ**. Khi lượng xe ra vào liên tục trong dịp nghỉ lễ, CPU sẽ bị quá tải bởi việc di chuyển dữ liệu ngầm này, dẫn đến hiện tượng hệ thống bị chậm/nghẽn (bottleneck).
+
+---
+
+## 3. Giải pháp Tối ưu: Thuật toán Con trỏ Chỉ số (Pointer/HeadIndex)
+
+Để giải quyết bài toán hàng chục nghìn lượt xe xếp hàng mà không bị nghẽn, hệ thống cần từ bỏ việc xóa thực sự bằng `shift()`. 
+
+**Cách hoạt động của giải pháp cải tiến:**
+1. Giữ nguyên mảng dữ liệu (không xóa phần tử đầu tiên).
+2. Sử dụng một biến con trỏ `headIndex` (bắt đầu bằng `0`) để ghi nhớ vị trí của chiếc xe đang ở vị trí đầu hàng.
+3. Khi điều phối xe vào sạc, ta lấy xe tại `queue[headIndex]` và chỉ việc tăng `headIndex++`. Thêm vào đó, gán `queue[headIndex] = null` để Garbage Collector của V8 dọn dẹp bộ nhớ.
+
+**Kết quả:** Thao tác lấy xe đầu hàng giờ đây trở thành **O(1)**. Cho dù hàng đợi có 1 triệu phương tiện, tốc độ điều phối vẫn diễn ra tức thời (chỉ mất chi phí cộng 1 vào biến `headIndex`).
